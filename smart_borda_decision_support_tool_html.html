@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SMART → Borda Decision Support (Demo)</title>
+<style>
+  :root{--bg:#f6f8fa;--card:#fff;--muted:#6b7280;--accent:#0ea5a4}
+  body{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:16px;background:var(--bg);color:#0f172a}
+  .container{max-width:1100px;margin:0 auto}
+  h1{font-size:20px;margin:6px 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--card);border-radius:8px;padding:12px;box-shadow:0 1px 3px rgba(15,23,42,0.06)}
+  label{font-size:13px;color:var(--muted)}
+  input[type=text], input[type=number], select{width:100%;padding:6px;border:1px solid #e6eef0;border-radius:6px;margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border-bottom:1px solid #eef2f6;padding:6px;text-align:left}
+  th{background:#fbfcfd;font-weight:600}
+  .row-actions{display:flex;gap:6px}
+  button{background:var(--accent);border:none;color:white;padding:6px 10px;border-radius:6px;cursor:pointer}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(14,165,164,0.12)}
+  .small{font-size:12px;padding:4px 8px}
+  .muted{color:var(--muted);font-size:13px}
+  .wide{grid-column:1/3}
+  .results{margin-top:8px}
+  pre{background:#0b1220;color:#dbeafe;padding:12px;border-radius:6px;overflow:auto}
+  .danger{background:#fee2e2;color:#991b1b}
+  .success{background:#ecfdf5;color:#064e3b}
+  .flex{display:flex;gap:8px;align-items:center}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>SMART → Borda Decision Support — Demo</h1>
+  <p class="muted">Tool sederhana: tambahkan kriteria, alternatif, juri, masukkan bobot mentah & skor, lalu tekan <strong>Compute</strong>.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Kriteria</h3>
+      <div class="muted">Tambah / hapus kriteria. Pilih tipe <em>benefit</em> atau <em>cost</em>.</div>
+      <table id="criteriaTable"><thead><tr><th>Nama</th><th>Tipe</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="newCriterion" placeholder="Contoh: Synchronization"><select id="newCriterionType"><option value="benefit">Benefit</option><option value="cost">Cost</option></select><button id="addCriterionBtn" class="small">Tambah</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Alternatif</h3>
+      <div class="muted">Tambah / hapus alternatif (peserta).</div>
+      <table id="alternativesTable"><thead><tr><th>Nama</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="newAlternative" placeholder="Nama alternatif"><button id="addAltBtn" class="small">Tambah</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Juri</h3>
+      <div class="muted">Tambah juri. Setiap juri dapat mengisi bobot mentah kriteria dan nilai performa setiap alternatif.</div>
+      <table id="judgesTable"><thead><tr><th>Nama Juri</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="newJudge" placeholder="Nama juri"><button id="addJudgeBtn" class="small">Tambah</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Kontrol</h3>
+      <div class="muted">Setelah data dimasukkan, tekan compute untuk menjalankan SMART (per juri) dan aggregasi Borda.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="computeBtn">Compute</button>
+        <button id="exportBtn" class="ghost">Export JSON</button>
+        <button id="resetBtn" class="ghost danger">Reset Semua</button>
+      </div>
+      <div class="results" id="status"></div>
+    </div>
+
+    <div class="card wide">
+      <h3>Hasil & Tabel</h3>
+      <div class="muted">Di sini tampil per-juri SMART dan hasil akhir Borda.</div>
+      <div id="resultsArea"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Simple in-memory model
+const model = {criteria:[],alternatives:[],judges:[]};
+
+// Helpers
+function $(id){return document.getElementById(id)}
+function renderCriteria(){
+  const tbody = $('criteriaTable').querySelector('tbody'); tbody.innerHTML='';
+  model.criteria.forEach((c,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(c.name)}</td><td>${c.type}</td><td class='row-actions'><button class='small' data-idx='${i}' onclick='editCriterion(${i})'>Edit</button><button class='small' onclick='deleteCriterion(${i})'>Hapus</button></td>`;
+    tbody.appendChild(tr);
+  })
+}
+function renderAlternatives(){
+  const tbody = $('alternativesTable').querySelector('tbody'); tbody.innerHTML='';
+  model.alternatives.forEach((a,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(a)}</td><td><button class='small' onclick='deleteAlternative(${i})'>Hapus</button></td>`;
+    tbody.appendChild(tr);
+  })
+}
+function renderJudges(){
+  const tbody = $('judgesTable').querySelector('tbody'); tbody.innerHTML='';
+  model.judges.forEach((j,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(j.name)}</td><td class='row-actions'><button class='small' onclick='openJudge(${i})'>Open</button><button class='small' onclick='deleteJudge(${i})'>Hapus</button></td>`;
+    tbody.appendChild(tr);
+  })
+}
+
+// CRUD
+$('addCriterionBtn').onclick = ()=>{
+  const name = $('newCriterion').value.trim(); const type = $('newCriterionType').value;
+  if(!name) return alert('Isi nama kriteria');
+  model.criteria.push({name,type});
+  // add default weight and scores placeholders for judges
+  model.judges.forEach(j=>{ j.weights[name] = 50; j.scores.forEach(s=> s[name] = 0); });
+  $('newCriterion').value=''; renderCriteria();
+}
+function deleteCriterion(i){ if(!confirm('Hapus kriteria?')) return; const name=model.criteria[i].name; model.criteria.splice(i,1); // remove from judges
+  model.judges.forEach(j=>{ delete j.weights[name]; j.scores.forEach(s=> delete s[name]); }); renderCriteria(); }
+function editCriterion(i){ const c=model.criteria[i]; const newName=prompt('Nama kriteria',c.name); if(!newName) return; const newType=prompt('Type (benefit/cost)',c.type)||c.type; // rename in model
+  const oldName=c.name; c.name=newName; c.type=newType; model.judges.forEach(j=>{ j.weights[newName] = j.weights[oldName] || 50; delete j.weights[oldName]; j.scores.forEach(s=>{ s[newName]=s[oldName]||0; delete s[oldName]; }); }); renderCriteria(); }
+
+$('addAltBtn').onclick = ()=>{ const n=$('newAlternative').value.trim(); if(!n) return alert('Isi nama alternatif'); model.alternatives.push(n); model.judges.forEach(j=> j.scores.push(initScoresForAlt())); $('newAlternative').value=''; renderAlternatives(); }
+function deleteAlternative(i){ if(!confirm('Hapus alternatif?')) return; model.alternatives.splice(i,1); model.judges.forEach(j=> j.scores.splice(i,1)); renderAlternatives(); }
+
+$('addJudgeBtn').onclick = ()=>{ const n=$('newJudge').value.trim(); if(!n) return alert('Isi nama juri'); const j = {name:n, weights:{}, scores:[]}; // default weights and scores
+  model.criteria.forEach(c=> j.weights[c.name]=50); model.alternatives.forEach(a=> j.scores.push(initScoresForAlt())); model.judges.push(j); $('newJudge').value=''; renderJudges(); }
+function deleteJudge(i){ if(!confirm('Hapus juri?')) return; model.judges.splice(i,1); renderJudges(); }
+function initScoresForAlt(){ const obj={}; model.criteria.forEach(c=> obj[c.name]=0); return obj }
+
+function openJudge(i){ // popup small editor
+  const j = model.judges[i]; const dlg = window.open('', '_blank', 'width=800,height=700');
+  const html = judgeEditorHtml(i);
+  dlg.document.write(html); dlg.document.close(); }
+
+function judgeEditorHtml(idx){ const j=model.judges[idx]; const criteriaList = model.criteria.map(c=>c.name);
+  return `<!doctype html><html><head><meta charset='utf8'><title>Editor ${escapeHtml(j.name)}</title><style>body{font-family:Arial;padding:12px} table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px}input{width:80px}</style></head><body>
+    <h3>Editor Juri: ${escapeHtml(j.name)}</h3>
+    <p>Bobot mentah tiap kriteria (skala bebas, mis. 1-100)</p>
+    <table><thead><tr><th>Kriteria</th><th>Type</th><th>Bobot mentah</th></tr></thead><tbody>${model.criteria.map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${c.type}</td><td><input id='w_${escapeId(c.name)}' value='${j.weights[c.name]||50}'></td></tr>`).join('')}</tbody></table>
+    <h4>Skor alternatif (0-10)</h4>
+    <table><thead><tr><th>Alternatif</th>${criteriaList.map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>
+    ${model.alternatives.map((a,ai)=>`<tr><td>${escapeHtml(a)}</td>${criteriaList.map(c=>`<td><input id='s_${ai}_${escapeId(c)}' value='${j.scores[ai] ? j.scores[ai][c] : 0}'></td>`).join('')}</tr>`).join('')}
+    </tbody></table>
+    <div style='margin-top:8px'><button id='saveBtn'>Simpan & Tutup</button></div>
+    <script>
+      function byId(id){return document.getElementById(id)}
+      document.getElementById('saveBtn').onclick = ()=>{
+        const data={weights:{},scores:[]};
+        ${model.criteria.map(c=>`data.weights['${c.name}'] = byId('w_${escapeId(c.name)}').value;`).join('\n')}
+        ${model.alternatives.map((a,ai)=>`data.scores[${ai}] = {}; ${model.criteria.map(c=>`data.scores[${ai}]['${c.name}'] = Number(byId('s_${ai}_${escapeId(c.name)}').value) || 0;`).join('')}`).join('\n')}
+        // send to opener
+        window.opener.postMessage({type:'judge_save', idx:${idx}, payload:data}, '*');
+        window.close();
+      }
+    <\/script>
+  </body></html>` }
+
+// receive saved judge data
+window.addEventListener('message', e=>{
+  try{
+    const m=e.data; if(m && m.type==='judge_save'){
+      const j = model.judges[m.idx]; const p=m.payload;
+      // convert weights to numbers
+      for(const k of Object.keys(p.weights)) j.weights[k]=Number(p.weights[k])||0;
+      // scores
+      j.scores = p.scores.map(r=>{ const out={}; for(const k of Object.keys(r)) out[k]=Number(r[k])||0; return out });
+      renderJudges();
+      updateStatus('Juri '+j.name+' disimpan');
+    }
+  }catch(err){console.error(err)}
+})
+
+function updateStatus(msg){ $('status').innerHTML = `<div class='muted'>${msg}</div>` }
+
+function computeAll(){ if(model.criteria.length===0||model.alternatives.length===0||model.judges.length===0){ alert('Pastikan minimal 1 kriteria, 1 alternatif, 1 juri'); return }
+  // for each judge: normalize weights, compute utilities per criterion (min-max among alternatives), compute weighted contributions, SMART score and rank
+  const perJudgeResults = [];
+  model.judges.forEach(j=>{
+    // normalize
+    const raw = j.weights; const norm = {}; const keys = Object.keys(raw);
+    let sum=0; keys.forEach(k=>sum += Number(raw[k]||0)); if(sum===0) sum=1;
+    keys.forEach(k=> norm[k] = (Number(raw[k]||0))/sum);
+    // utilities min-max for each criterion among alternatives
+    const utilities = model.alternatives.map((a,ai)=>{ const obj={Member:a}; keys.forEach(k=>obj[k]=0); return obj });
+    keys.forEach(k=>{
+      // gather values
+      const vals = model.judges.map(_=>null) // placeholder
+      const arr = model.alternatives.map((a,ai)=> (j.scores[ai] && typeof j.scores[ai][k] !== 'undefined') ? Number(j.scores[ai][k]) : 0 );
+      const min = Math.min(...arr); const max = Math.max(...arr);
+      utilities.forEach((u,ai)=>{
+        const rawv = arr[ai];
+        let util = 50;
+        if(max !== min){
+          // check criterion type
+          const crit = model.criteria.find(c=>c.name===k);
+          if(crit && crit.type === 'cost'){
+            util = 100 * (max - rawv) / (max - min);
+          } else {
+            util = 100 * (rawv - min) / (max - min);
+          }
+        }
+        utilities[ai][k] = util; // 0..100
+      })
+    })
+    // weighted contributions
+    utilities.forEach(u=>{
+      let total=0; keys.forEach(k=>{ total += u[k] * norm[k]; }); u.SMART = total; u._weights = norm;
+    })
+    utilities.sort((a,b)=>b.SMART - a.SMART);
+    utilities.forEach((u,idx)=> u.Rank = idx+1);
+    perJudgeResults.push({judge:j.name, table:utilities});
+  });
+
+  // Borda aggregation: convert each per-judge rank to points (N+1 - rank) and sum
+  const N = model.alternatives.length; const totals = {};
+  model.alternatives.forEach(a=> totals[a]=0);
+  perJudgeResults.forEach(p=>{
+    p.table.forEach(row=>{ totals[row.Member] += (N + 1 - row.Rank); });
+  });
+  const final = Object.keys(totals).map(m=>({Member:m, TotalBorda:totals[m]})).sort((a,b)=>b.TotalBorda - a.TotalBorda);
+
+  // render results
+  const out = [];
+  out.push('<h4>Per-Judge SMART (utilities & SMART score)</h4>');
+  perJudgeResults.forEach(p=>{
+    out.push(`<h5>Juri: ${escapeHtml(p.judge)}</h5><table><thead><tr><th>Member</th>${model.criteria.map(c=>`<th>${escapeHtml(c.name)}</th>`).join('')}<th>SMART</th><th>Rank</th></tr></thead><tbody>`);
+    p.table.forEach(r=>{
+      out.push('<tr><td>'+escapeHtml(r.Member)+'</td>'+ model.criteria.map(c=>`<td>${(r[c]).toFixed(2)}</td>`).join('') + `<td>${r.SMART.toFixed(4)}</td><td>${r.Rank}</td></tr>`);
+    })
+    out.push('</tbody></table>');
+  })
+  out.push('<h4>Final Borda aggregation</h4>');
+  out.push('<table><thead><tr><th>Member</th><th>Total Borda</th></tr></thead><tbody>');
+  final.forEach(f=> out.push(`<tr><td>${escapeHtml(f.Member)}</td><td>${f.TotalBorda}</td></tr>`));
+  out.push('</tbody></table>');
+  $('resultsArea').innerHTML = out.join('');
+  updateStatus('Compute selesai');
+}
+
+// Export / Reset
+$('exportBtn').onclick = ()=>{
+  const data = JSON.stringify(model,null,2); const blob = new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='smart_borda_model.json'; a.click(); URL.revokeObjectURL(url);
+}
+$('resetBtn').onclick = ()=>{ if(confirm('Reset semua data?')){ model.criteria=[]; model.alternatives=[]; model.judges=[]; renderAll(); $('resultsArea').innerHTML=''; updateStatus('Reset done'); }}
+$('computeBtn').onclick = computeAll;
+
+function renderAll(){ renderCriteria(); renderAlternatives(); renderJudges(); }
+function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeId(s){ return encodeURIComponent(s).replace(/%/g,''); }
+
+// initial example: populate with some defaults for convenience
+(function seed(){ const initialCriteria = ['Synchronization','Marching Accuracy','Flag Handling','Command Response','Physical Appearance','Time Accuracy','Protocol','Teamwork and Communication','Discipline','Cohesiveness','Responsibility']; initialCriteria.forEach(c=> model.criteria.push({name:c,type:'benefit'})); model.alternatives.push('raniah yulia yasmin 9a','okta dina andriyanti 9b','maida kenzi kayana 9a','verlita eka putri 8d'); model.judges.push({name:'Sample Judge', weights: {}, scores: []}); model.criteria.forEach(c=> model.judges[0].weights[c.name]=50); model.alternatives.forEach(a=> model.judges[0].scores.push(initScoresForAlt())); renderAll(); })();
+</script>
+</body>
+</html>

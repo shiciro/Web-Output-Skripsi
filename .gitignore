@@ -1,0 +1,10 @@
+# Node modules (if you add node-based tools)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+*.log

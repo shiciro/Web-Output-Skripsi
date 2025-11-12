@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SMART → Borda Decision Support (Demo)</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="container">
+  <h1>SMART → Borda Decision Support — Demo</h1>
+  <p class="muted">Tool sederhana: tambahkan kriteria, alternatif, juri, masukkan bobot mentah & skor, lalu tekan <strong>Compute</strong>.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Kriteria</h3>
+      <div class="muted">Tambah / hapus kriteria. Pilih tipe <em>benefit</em> atau <em>cost</em>.</div>
+      <table id="criteriaTable"><thead><tr><th>Nama</th><th>Tipe</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="newCriterion" placeholder="Contoh: Synchronization"><select id="newCriterionType"><option value="benefit">Benefit</option><option value="cost">Cost</option></select><button id="addCriterionBtn" class="small">Tambah</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Alternatif</h3>
+      <div class="muted">Tambah / hapus alternatif (peserta).</div>
+      <table id="alternativesTable"><thead><tr><th>Nama</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="newAlternative" placeholder="Nama alternatif"><button id="addAltBtn" class="small">Tambah</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Juri</h3>
+      <div class="muted">Tambah juri. Setiap juri dapat mengisi bobot mentah kriteria dan nilai performa setiap alternatif.</div>
+      <table id="judgesTable"><thead><tr><th>Nama Juri</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="newJudge" placeholder="Nama juri"><button id="addJudgeBtn" class="small">Tambah</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Kontrol</h3>
+      <div class="muted">Setelah data dimasukkan, tekan compute untuk menjalankan SMART (per juri) dan aggregasi Borda.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="computeBtn">Compute</button>
+        <button id="exportBtn" class="ghost">Export JSON</button>
+        <button id="resetBtn" class="ghost danger">Reset Semua</button>
+      </div>
+      <div class="results" id="status"></div>
+    </div>
+
+    <div class="card wide">
+      <h3>Hasil & Tabel</h3>
+      <div class="muted">Di sini tampil per-juri SMART dan hasil akhir Borda.</div>
+      <div id="resultsArea"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>

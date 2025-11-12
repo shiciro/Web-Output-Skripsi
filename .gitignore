@@ -8,3 +8,4 @@ Thumbs.db
 # Editor files
 .vscode/
 *.log
+.github/copilot-instructions.md

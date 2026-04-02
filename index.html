@@ -1,56 +1,154 @@
 <!doctype html>
 <html lang="id">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>SMART → Borda Decision Support (Demo)</title>
-<link rel="stylesheet" href="css/styles.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>SMART → Borda Decision Support</title>
+  <meta name="description" content="Tool pendukung keputusan menggunakan metode SMART dan Borda. Tambahkan kriteria, alternatif, juri, lalu compute." />
+
+  <!-- Google Fonts — Outfit (Display) + Inter (Body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Material Symbols -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<div class="container">
-  <h1>SMART → Borda Decision Support — Demo</h1>
-  <p class="muted">Tool sederhana: tambahkan kriteria, alternatif, juri, masukkan bobot mentah & skor, lalu tekan <strong>Compute</strong>.</p>
 
+<header class="app-bar">
+  <div class="container">
+    <h1 class="app-bar-title">
+      <span class="material-symbols-rounded">analytics</span>
+      SMART → Borda Decision Support
+    </h1>
+    <p class="app-bar-subtitle">Tambahkan kriteria, alternatif, dan juri. Masukkan bobot mentah &amp; skor, lalu tekan <strong>Compute</strong> untuk hasil akhir.</p>
+  </div>
+</header>
+
+<main class="container">
   <div class="grid">
-    <div class="card">
-      <h3>Kriteria</h3>
-      <div class="muted">Tambah / hapus kriteria. Pilih tipe <em>benefit</em> atau <em>cost</em>.</div>
-      <table id="criteriaTable"><thead><tr><th>Nama</th><th>Tipe</th><th>Aksi</th></tr></thead><tbody></tbody></table>
-      <div style="display:flex;gap:8px;margin-top:8px"><input id="newCriterion" placeholder="Contoh: Synchronization"><select id="newCriterionType"><option value="benefit">Benefit</option><option value="cost">Cost</option></select><button id="addCriterionBtn" class="small">Tambah</button></div>
-    </div>
 
-    <div class="card">
-      <h3>Alternatif</h3>
-      <div class="muted">Tambah / hapus alternatif (peserta).</div>
-      <table id="alternativesTable"><thead><tr><th>Nama</th><th>Aksi</th></tr></thead><tbody></tbody></table>
-      <div style="display:flex;gap:8px;margin-top:8px"><input id="newAlternative" placeholder="Nama alternatif"><button id="addAltBtn" class="small">Tambah</button></div>
-    </div>
+    <!-- Kriteria Card -->
+    <section class="card" id="criteriaCard">
+      <div class="card-header">
+        <span class="material-symbols-rounded">checklist</span>
+        <h3>Kriteria</h3>
+      </div>
+      <p class="muted">Tambah / hapus kriteria. Pilih tipe <em>benefit</em> atau <em>cost</em>.</p>
+      <div class="table-wrapper">
+        <table id="criteriaTable">
+          <thead><tr><th>Nama</th><th>Tipe</th><th>Aksi</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="add-row">
+        <input id="newCriterion" placeholder="Contoh: Synchronization">
+        <select id="newCriterionType">
+          <option value="benefit">Benefit</option>
+          <option value="cost">Cost</option>
+        </select>
+        <button id="addCriterionBtn" class="small tonal">
+          <span class="material-symbols-rounded">add</span>
+          Tambah
+        </button>
+      </div>
+    </section>
 
-    <div class="card">
-      <h3>Juri</h3>
-      <div class="muted">Tambah juri. Setiap juri dapat mengisi bobot mentah kriteria dan nilai performa setiap alternatif.</div>
-      <table id="judgesTable"><thead><tr><th>Nama Juri</th><th>Aksi</th></tr></thead><tbody></tbody></table>
-      <div style="display:flex;gap:8px;margin-top:8px"><input id="newJudge" placeholder="Nama juri"><button id="addJudgeBtn" class="small">Tambah</button></div>
-    </div>
+    <!-- Alternatif Card -->
+    <section class="card" id="alternativesCard">
+      <div class="card-header">
+        <span class="material-symbols-rounded">group</span>
+        <h3>Alternatif</h3>
+      </div>
+      <p class="muted">Tambah / hapus alternatif (peserta).</p>
+      <div class="table-wrapper">
+        <table id="alternativesTable">
+          <thead><tr><th>Nama</th><th>Aksi</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="add-row">
+        <input id="newAlternative" placeholder="Nama alternatif">
+        <button id="addAltBtn" class="small tonal">
+          <span class="material-symbols-rounded">add</span>
+          Tambah
+        </button>
+      </div>
+    </section>
 
-    <div class="card">
-      <h3>Kontrol</h3>
-      <div class="muted">Setelah data dimasukkan, tekan compute untuk menjalankan SMART (per juri) dan aggregasi Borda.</div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button id="computeBtn">Compute</button>
-        <button id="exportBtn" class="ghost">Export JSON</button>
-        <button id="resetBtn" class="ghost danger">Reset Semua</button>
+    <!-- Juri Card -->
+    <section class="card" id="judgesCard">
+      <div class="card-header">
+        <span class="material-symbols-rounded">gavel</span>
+        <h3>Juri</h3>
+      </div>
+      <p class="muted">Tambah juri. Setiap juri dapat mengisi bobot mentah kriteria dan nilai performa setiap alternatif.</p>
+      <div class="table-wrapper">
+        <table id="judgesTable">
+          <thead><tr><th>Nama Juri</th><th>Aksi</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="add-row">
+        <input id="newJudge" placeholder="Nama juri">
+        <button id="addJudgeBtn" class="small tonal">
+          <span class="material-symbols-rounded">add</span>
+          Tambah
+        </button>
+      </div>
+    </section>
+
+    <!-- Kontrol Card -->
+    <section class="card" id="controlCard">
+      <div class="card-header">
+        <span class="material-symbols-rounded">tune</span>
+        <h3>Kontrol</h3>
+      </div>
+      <p class="muted">Setelah data dimasukkan, tekan compute untuk menjalankan SMART (per juri) dan aggregasi Borda.</p>
+      <div class="control-buttons">
+        <button id="computeBtn">
+          <span class="material-symbols-rounded">calculate</span>
+          Compute
+        </button>
+        <button id="importCsvBtn" class="tonal">
+          <span class="material-symbols-rounded">upload_file</span>
+          Import CSV
+        </button>
+        <input type="file" id="csvInput" accept=".csv" style="display:none">
+        
+        <button id="importWeightBtn" class="tonal">
+          <span class="material-symbols-rounded">weight</span>
+          Import Bobot
+        </button>
+        <input type="file" id="weightInput" accept=".csv" style="display:none">
+        <button id="exportBtn" class="ghost">
+          <span class="material-symbols-rounded">download</span>
+          Export JSON
+        </button>
+        <button id="resetBtn" class="ghost danger">
+          <span class="material-symbols-rounded">restart_alt</span>
+          Reset Semua
+        </button>
       </div>
       <div class="results" id="status"></div>
-    </div>
+    </section>
 
-    <div class="card wide">
-      <h3>Hasil & Tabel</h3>
-      <div class="muted">Di sini tampil per-juri SMART dan hasil akhir Borda.</div>
+    <!-- Hasil Card -->
+    <section class="card wide" id="resultsCard">
+      <div class="card-header">
+        <span class="material-symbols-rounded">leaderboard</span>
+        <h3>Hasil &amp; Tabel</h3>
+      </div>
+      <p class="muted">Di sini tampil per-juri SMART dan hasil akhir Borda.</p>
       <div id="resultsArea"></div>
-    </div>
+    </section>
+
   </div>
-</div>
+</main>
 
 <script src="js/script.js"></script>
 </body>

@@ -1,7 +1,6 @@
 # SMART → Borda Decision Support — Demo
 
-This is a small demo web app that runs per-judge SMART calculations and aggregates rankings using the Borda count.
-
+ini adalah project kecil yang menjalankan kalkulasi metode smart dan Borda count kepada setiap juri ke setiap alternatif
 Project layout (organized):
 
 - index.html        — main entry (open in browser)

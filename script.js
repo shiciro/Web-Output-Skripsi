@@ -1,175 +1,564 @@
-// Simple in-memory model
-const model = {criteria:[],alternatives:[],judges:[]};
+// ===================================================================
+// SMART → Borda Decision Support — Script
+// Custom modals, in-page judge editor, M3 Expressive styled rendering
+// ===================================================================
 
-// Helpers
-function $(id){return document.getElementById(id)}
-function renderCriteria(){
-  const tbody = $('criteriaTable').querySelector('tbody'); tbody.innerHTML='';
-  model.criteria.forEach((c,i)=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(c.name)}</td><td>${c.type}</td><td class='row-actions'><button class='small' data-idx='${i}' onclick='editCriterion(${i})'>Edit</button><button class='small' onclick='deleteCriterion(${i})'>Hapus</button></td>`;
-    tbody.appendChild(tr);
-  })
+const model = { criteria: [], alternatives: [], judges: [] };
+
+// ── DOM Helpers ──
+function $(id) { return document.getElementById(id); }
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-function renderAlternatives(){
-  const tbody = $('alternativesTable').querySelector('tbody'); tbody.innerHTML='';
-  model.alternatives.forEach((a,i)=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(a)}</td><td><button class='small' onclick='deleteAlternative(${i})'>Hapus</button></td>`;
-    tbody.appendChild(tr);
-  })
-}
-function renderJudges(){
-  const tbody = $('judgesTable').querySelector('tbody'); tbody.innerHTML='';
-  model.judges.forEach((j,i)=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(j.name)}</td><td class='row-actions'><button class='small' onclick='openJudge(${i})'>Open</button><button class='small' onclick='deleteJudge(${i})'>Hapus</button></td>`;
-    tbody.appendChild(tr);
-  })
-}
+function escapeId(s) { return encodeURIComponent(s).replace(/%/g, ''); }
 
-// CRUD
-$('addCriterionBtn').onclick = ()=>{
-  const name = $('newCriterion').value.trim(); const type = $('newCriterionType').value;
-  if(!name) return alert('Isi nama kriteria');
-  model.criteria.push({name,type});
-  // add default weight and scores placeholders for judges
-  model.judges.forEach(j=>{ j.weights[name] = 50; j.scores.forEach(s=> s[name] = 0); });
-  $('newCriterion').value=''; renderCriteria();
-}
-function deleteCriterion(i){ if(!confirm('Hapus kriteria?')) return; const name=model.criteria[i].name; model.criteria.splice(i,1); // remove from judges
-  model.judges.forEach(j=>{ delete j.weights[name]; j.scores.forEach(s=> delete s[name]); }); renderCriteria(); }
-function editCriterion(i){ const c=model.criteria[i]; const newName=prompt('Nama kriteria',c.name); if(!newName) return; const newType=prompt('Type (benefit/cost)',c.type)||c.type; // rename in model
-  const oldName=c.name; c.name=newName; c.type=newType; model.judges.forEach(j=>{ j.weights[newName] = j.weights[oldName] || 50; delete j.weights[oldName]; j.scores.forEach(s=>{ s[newName]=s[oldName]||0; delete s[oldName]; }); }); renderCriteria(); }
+// ── Custom Modal System ──
+// Replaces all native alert(), confirm(), prompt() calls
+const Modal = (() => {
+  let overlay = null;
 
-$('addAltBtn').onclick = ()=>{ const n=$('newAlternative').value.trim(); if(!n) return alert('Isi nama alternatif'); model.alternatives.push(n); model.judges.forEach(j=> j.scores.push(initScoresForAlt())); $('newAlternative').value=''; renderAlternatives(); }
-function deleteAlternative(i){ if(!confirm('Hapus alternatif?')) return; model.alternatives.splice(i,1); model.judges.forEach(j=> j.scores.splice(i,1)); renderAlternatives(); }
-
-$('addJudgeBtn').onclick = ()=>{ const n=$('newJudge').value.trim(); if(!n) return alert('Isi nama juri'); const j = {name:n, weights:{}, scores:[]}; // default weights and scores
-  model.criteria.forEach(c=> j.weights[c.name]=50); model.alternatives.forEach(a=> j.scores.push(initScoresForAlt())); model.judges.push(j); $('newJudge').value=''; renderJudges(); }
-function deleteJudge(i){ if(!confirm('Hapus juri?')) return; model.judges.splice(i,1); renderJudges(); }
-function initScoresForAlt(){ const obj={}; model.criteria.forEach(c=> obj[c.name]=0); return obj }
-
-function openJudge(i){ // popup small editor
-  const j = model.judges[i]; const dlg = window.open('', '_blank', 'width=800,height=700');
-  const html = judgeEditorHtml(i);
-  dlg.document.write(html); dlg.document.close(); }
-
-function judgeEditorHtml(idx){ const j=model.judges[idx]; const criteriaList = model.criteria.map(c=>c.name);
-  return `<!doctype html><html><head><meta charset='utf8'><title>Editor ${escapeHtml(j.name)}</title><style>body{font-family:Arial;padding:12px} table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px}input{width:80px}</style></head><body>
-    <h3>Editor Juri: ${escapeHtml(j.name)}</h3>
-    <p>Bobot mentah tiap kriteria (skala bebas, mis. 1-100)</p>
-    <table><thead><tr><th>Kriteria</th><th>Type</th><th>Bobot mentah</th></tr></thead><tbody>${model.criteria.map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${c.type}</td><td><input id='w_${escapeId(c.name)}' value='${j.weights[c.name]||50}'></td></tr>`).join('')}</tbody></table>
-    <h4>Skor alternatif (0-10)</h4>
-    <table><thead><tr><th>Alternatif</th>${criteriaList.map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>
-    ${model.alternatives.map((a,ai)=>`<tr><td>${escapeHtml(a)}</td>${criteriaList.map(c=>`<td><input id='s_${ai}_${escapeId(c)}' value='${j.scores[ai] ? j.scores[ai][c] : 0}'></td>`).join('')}</tr>`).join('')}
-    </tbody></table>
-    <div style='margin-top:8px'><button id='saveBtn'>Simpan & Tutup</button></div>
-    <script>
-      function byId(id){return document.getElementById(id)}
-      document.getElementById('saveBtn').onclick = ()=>{
-        const data={weights:{},scores:[]};
-        ${model.criteria.map(c=>`data.weights['${c.name}'] = byId('w_${escapeId(c.name)}').value;`).join('\n')}
-        ${model.alternatives.map((a,ai)=>`data.scores[${ai}] = {}; ${model.criteria.map(c=>`data.scores[${ai}]['${c.name}'] = Number(byId('s_${ai}_${escapeId(c.name)}').value) || 0;`).join('')}`).join('\n')}
-        // send to opener
-        window.opener.postMessage({type:'judge_save', idx:${idx}, payload:data}, '*');
-        window.close();
-      }
-    <\/script>
-  </body></html>` }
-
-// receive saved judge data
-window.addEventListener('message', e=>{
-  try{
-    const m=e.data; if(m && m.type==='judge_save'){
-      const j = model.judges[m.idx]; const p=m.payload;
-      // convert weights to numbers
-      for(const k of Object.keys(p.weights)) j.weights[k]=Number(p.weights[k])||0;
-      // scores
-      j.scores = p.scores.map(r=>{ const out={}; for(const k of Object.keys(r)) out[k]=Number(r[k])||0; return out });
-      renderJudges();
-      updateStatus('Juri '+j.name+' disimpan');
+  function getOverlay() {
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      document.body.appendChild(overlay);
     }
-  }catch(err){console.error(err)}
-})
+    return overlay;
+  }
 
-function updateStatus(msg){ $('status').innerHTML = `<div class='muted'>${msg}</div>` }
+  function createDialog(content, buttons) {
+    const ov = getOverlay();
+    ov.innerHTML = '';
+    ov.classList.add('active');
 
-function computeAll(){ if(model.criteria.length===0||model.alternatives.length===0||model.judges.length===0){ alert('Pastikan minimal 1 kriteria, 1 alternatif, 1 juri'); return }
-  // for each judge: normalize weights, compute utilities per criterion (min-max among alternatives), compute weighted contributions, SMART score and rank
-  const perJudgeResults = [];
-  model.judges.forEach(j=>{
-    // normalize
-    const raw = j.weights; const norm = {}; const keys = Object.keys(raw);
-    let sum=0; keys.forEach(k=>sum += Number(raw[k]||0)); if(sum===0) sum=1;
-    keys.forEach(k=> norm[k] = (Number(raw[k]||0))/sum);
-    // utilities min-max for each criterion among alternatives
-    const utilities = model.alternatives.map((a,ai)=>{ const obj={Member:a}; keys.forEach(k=>obj[k]=0); return obj });
-    keys.forEach(k=>{
-      // gather values
-      const vals = model.judges.map(_=>null) // placeholder
-      const arr = model.alternatives.map((a,ai)=> (j.scores[ai] && typeof j.scores[ai][k] !== 'undefined') ? Number(j.scores[ai][k]) : 0 );
-      const min = Math.min(...arr); const max = Math.max(...arr);
-      utilities.forEach((u,ai)=>{
-        const rawv = arr[ai];
-        let util = 50;
-        if(max !== min){
-          // check criterion type
-          const crit = model.criteria.find(c=>c.name===k);
-          if(crit && crit.type === 'cost'){
-            util = 100 * (max - rawv) / (max - min);
-          } else {
-            util = 100 * (rawv - min) / (max - min);
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-dialog';
+    dialog.innerHTML = content;
+
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    buttons.forEach(btn => {
+      const b = document.createElement('button');
+      b.textContent = btn.label;
+      b.className = btn.className || '';
+      b.onclick = () => {
+        ov.classList.remove('active');
+        setTimeout(() => { ov.innerHTML = ''; }, 300);
+        btn.callback();
+      };
+      actions.appendChild(b);
+    });
+    dialog.appendChild(actions);
+    ov.appendChild(dialog);
+
+    // Focus first input if exists
+    requestAnimationFrame(() => {
+      const inp = dialog.querySelector('input');
+      if (inp) { inp.focus(); inp.select(); }
+    });
+
+    // Enter key support
+    dialog.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const primary = actions.querySelector('button:not(.modal-btn-cancel)');
+        if (primary) primary.click();
+      }
+      if (e.key === 'Escape') {
+        const cancel = actions.querySelector('.modal-btn-cancel');
+        if (cancel) cancel.click();
+      }
+    });
+  }
+
+  return {
+    alert(message) {
+      return new Promise(resolve => {
+        createDialog(
+          `<div class="modal-icon"><span class="material-symbols-rounded">info</span></div>
+           <div class="modal-message">${escapeHtml(message)}</div>`,
+          [{ label: 'OK', className: 'modal-btn-primary', callback: resolve }]
+        );
+      });
+    },
+
+    confirm(message) {
+      return new Promise(resolve => {
+        createDialog(
+          `<div class="modal-icon modal-icon-warning"><span class="material-symbols-rounded">warning</span></div>
+           <div class="modal-message">${escapeHtml(message)}</div>`,
+          [
+            { label: 'Batal', className: 'modal-btn-cancel', callback: () => resolve(false) },
+            { label: 'Ya, Lanjut', className: 'modal-btn-danger', callback: () => resolve(true) }
+          ]
+        );
+      });
+    },
+
+    prompt(message, defaultValue = '') {
+      return new Promise(resolve => {
+        createDialog(
+          `<div class="modal-icon modal-icon-edit"><span class="material-symbols-rounded">edit</span></div>
+           <div class="modal-label">${escapeHtml(message)}</div>
+           <input class="modal-input" type="text" value="${escapeHtml(defaultValue)}" />`,
+          [
+            { label: 'Batal', className: 'modal-btn-cancel', callback: () => resolve(null) },
+            {
+              label: 'Simpan', className: 'modal-btn-primary', callback: () => {
+                const val = overlay.querySelector('.modal-input').value;
+                resolve(val);
+              }
+            }
+          ]
+        );
+      });
+    },
+
+    /** Prompt with select dropdown */
+    promptSelect(message, options, defaultValue = '') {
+      return new Promise(resolve => {
+        const opts = options.map(o =>
+          `<option value="${escapeHtml(o)}" ${o === defaultValue ? 'selected' : ''}>${escapeHtml(o)}</option>`
+        ).join('');
+        createDialog(
+          `<div class="modal-icon modal-icon-edit"><span class="material-symbols-rounded">tune</span></div>
+           <div class="modal-label">${escapeHtml(message)}</div>
+           <select class="modal-select">${opts}</select>`,
+          [
+            { label: 'Batal', className: 'modal-btn-cancel', callback: () => resolve(null) },
+            {
+              label: 'Simpan', className: 'modal-btn-primary', callback: () => {
+                const val = overlay.querySelector('.modal-select').value;
+                resolve(val);
+              }
+            }
+          ]
+        );
+      });
+    },
+
+    close() {
+      if (overlay) {
+        overlay.classList.remove('active');
+        setTimeout(() => { overlay.innerHTML = ''; }, 300);
+      }
+    }
+  };
+})();
+
+// ── Judge Editor Modal ──
+const JudgeEditor = (() => {
+  let editorOverlay = null;
+
+  function getEditorOverlay() {
+    if (!editorOverlay) {
+      editorOverlay = document.createElement('div');
+      editorOverlay.className = 'modal-overlay judge-editor-overlay';
+      document.body.appendChild(editorOverlay);
+    }
+    return editorOverlay;
+  }
+
+  return {
+    open(judgeIdx) {
+      const j = model.judges[judgeIdx];
+      const criteriaList = model.criteria.map(c => c.name);
+      const ov = getEditorOverlay();
+      ov.innerHTML = '';
+      ov.classList.add('active');
+
+      const dialog = document.createElement('div');
+      dialog.className = 'modal-dialog judge-editor-dialog';
+
+      // Header
+      let html = `
+        <div class="judge-editor-header">
+          <div class="judge-editor-title">
+            <span class="material-symbols-rounded">person</span>
+            <h3>Editor Juri: ${escapeHtml(j.name)}</h3>
+          </div>
+          <button class="judge-editor-close" id="judgeEditorClose">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+      `;
+
+      // Weights table
+      html += `
+        <div class="judge-editor-section">
+          <h4><span class="material-symbols-rounded">balance</span> Bobot Mentah Kriteria</h4>
+          <p class="muted">Skala bebas, mis. 1-100</p>
+          <div class="judge-editor-table-wrap">
+            <table>
+              <thead><tr><th>Kriteria</th><th>Tipe</th><th>Bobot</th></tr></thead>
+              <tbody>
+      `;
+      model.criteria.forEach(c => {
+        const chipClass = c.type === 'cost' ? 'chip chip-cost' : 'chip chip-benefit';
+        html += `<tr>
+          <td>${escapeHtml(c.name)}</td>
+          <td><span class="${chipClass}">${c.type}</span></td>
+          <td><input type="number" class="judge-weight-input" data-criterion="${escapeHtml(c.name)}" value="${j.weights[c.name] || 50}" min="0" /></td>
+        </tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+
+      // Scores table
+      html += `
+        <div class="judge-editor-section">
+          <h4><span class="material-symbols-rounded">scoreboard</span> Skor Alternatif</h4>
+          <p class="muted">Skala 0 – 10</p>
+          <div class="judge-editor-table-wrap">
+            <table>
+              <thead><tr><th>Alternatif</th>${criteriaList.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+              <tbody>
+      `;
+      model.alternatives.forEach((a, ai) => {
+        html += `<tr><td>${escapeHtml(a)}</td>`;
+        criteriaList.forEach(c => {
+          const val = (j.scores[ai] && j.scores[ai][c] !== undefined) ? j.scores[ai][c] : 0;
+          html += `<td><input type="number" class="judge-score-input" data-alt="${ai}" data-criterion="${escapeHtml(c)}" value="${val}" min="0" max="10" /></td>`;
+        });
+        html += `</tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+
+      // Actions
+      html += `
+        <div class="judge-editor-actions">
+          <button class="modal-btn-cancel" id="judgeEditorCancel">
+            <span class="material-symbols-rounded">close</span> Batal
+          </button>
+          <button class="modal-btn-primary" id="judgeEditorSave">
+            <span class="material-symbols-rounded">save</span> Simpan
+          </button>
+        </div>
+      `;
+
+      dialog.innerHTML = html;
+      ov.appendChild(dialog);
+
+      // Event handlers
+      $('judgeEditorClose').onclick = () => this.close();
+      $('judgeEditorCancel').onclick = () => this.close();
+      $('judgeEditorSave').onclick = () => {
+        // Save weights
+        dialog.querySelectorAll('.judge-weight-input').forEach(inp => {
+          const cName = inp.dataset.criterion;
+          j.weights[cName] = Number(inp.value) || 0;
+        });
+        // Save scores
+        dialog.querySelectorAll('.judge-score-input').forEach(inp => {
+          const ai = Number(inp.dataset.alt);
+          const cName = inp.dataset.criterion;
+          if (!j.scores[ai]) j.scores[ai] = {};
+          j.scores[ai][cName] = Number(inp.value) || 0;
+        });
+        this.close();
+        renderJudges();
+        updateStatus('Juri ' + j.name + ' disimpan');
+      };
+
+      // Close on overlay click
+      ov.onclick = (e) => {
+        if (e.target === ov) this.close();
+      };
+    },
+
+    close() {
+      if (editorOverlay) {
+        editorOverlay.classList.remove('active');
+        setTimeout(() => { editorOverlay.innerHTML = ''; }, 300);
+      }
+    }
+  };
+})();
+
+// ── Renderers ──
+function renderCriteria() {
+  const tbody = $('criteriaTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  model.criteria.forEach((c, i) => {
+    const tr = document.createElement('tr');
+    const chipClass = c.type === 'cost' ? 'chip chip-cost' : 'chip chip-benefit';
+    tr.innerHTML = `
+      <td>${escapeHtml(c.name)}</td>
+      <td><span class="${chipClass}">${c.type}</span></td>
+      <td class="row-actions">
+        <button class="small btn-edit" onclick="editCriterion(${i})"><span class="material-symbols-rounded">edit</span>Edit</button>
+        <button class="small btn-delete" onclick="deleteCriterion(${i})"><span class="material-symbols-rounded">delete</span>Hapus</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAlternatives() {
+  const tbody = $('alternativesTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  model.alternatives.forEach((a, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(a)}</td>
+      <td>
+        <button class="small btn-delete" onclick="deleteAlternative(${i})"><span class="material-symbols-rounded">delete</span>Hapus</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderJudges() {
+  const tbody = $('judgesTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  model.judges.forEach((j, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(j.name)}</td>
+      <td class="row-actions">
+        <button class="small btn-open" onclick="openJudge(${i})"><span class="material-symbols-rounded">open_in_new</span>Open</button>
+        <button class="small btn-delete" onclick="deleteJudge(${i})"><span class="material-symbols-rounded">delete</span>Hapus</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateStatus(msg) {
+  $('status').innerHTML = `<div class="status-chip"><span class="material-symbols-rounded" style="font-size:16px">check_circle</span>${escapeHtml(msg)}</div>`;
+}
+
+function getRankBadgeClass(rank) {
+  if (rank === 1) return 'rank-badge rank-1';
+  if (rank === 2) return 'rank-badge rank-2';
+  if (rank === 3) return 'rank-badge rank-3';
+  return 'rank-badge rank-other';
+}
+
+// ── CRUD & Main Logic ──
+document.addEventListener('DOMContentLoaded', () => {
+  // Criteria
+  $('addCriterionBtn').onclick = async () => {
+    const name = $('newCriterion').value.trim();
+    const type = $('newCriterionType').value;
+    if (!name) { await Modal.alert('Isi nama kriteria'); return; }
+    model.criteria.push({ name, type });
+    model.judges.forEach(j => { j.weights[name] = 50; j.scores.forEach(s => s[name] = 0); });
+    $('newCriterion').value = '';
+    renderCriteria();
+  };
+
+  async function deleteCriterion(i) {
+    const ok = await Modal.confirm('Hapus kriteria "' + model.criteria[i].name + '"?');
+    if (!ok) return;
+    const name = model.criteria[i].name;
+    model.criteria.splice(i, 1);
+    model.judges.forEach(j => { delete j.weights[name]; j.scores.forEach(s => delete s[name]); });
+    renderCriteria();
+  }
+
+  async function editCriterion(i) {
+    const c = model.criteria[i];
+    const newName = await Modal.prompt('Nama kriteria', c.name);
+    if (newName === null) return;
+    const newType = await Modal.promptSelect('Tipe kriteria', ['benefit', 'cost'], c.type);
+    if (newType === null) return;
+    const oldName = c.name;
+    c.name = newName;
+    c.type = newType;
+    model.judges.forEach(j => {
+      j.weights[newName] = j.weights[oldName] || 50;
+      delete j.weights[oldName];
+      j.scores.forEach(s => { s[newName] = s[oldName] || 0; delete s[oldName]; });
+    });
+    renderCriteria();
+  }
+
+  // Alternatives
+  $('addAltBtn').onclick = async () => {
+    const n = $('newAlternative').value.trim();
+    if (!n) { await Modal.alert('Isi nama alternatif'); return; }
+    model.alternatives.push(n);
+    model.judges.forEach(j => j.scores.push(initScoresForAlt()));
+    $('newAlternative').value = '';
+    renderAlternatives();
+  };
+
+  async function deleteAlternative(i) {
+    const ok = await Modal.confirm('Hapus alternatif "' + model.alternatives[i] + '"?');
+    if (!ok) return;
+    model.alternatives.splice(i, 1);
+    model.judges.forEach(j => j.scores.splice(i, 1));
+    renderAlternatives();
+  }
+
+  // Judges
+  $('addJudgeBtn').onclick = async () => {
+    const n = $('newJudge').value.trim();
+    if (!n) { await Modal.alert('Isi nama juri'); return; }
+    const j = { name: n, weights: {}, scores: [] };
+    model.criteria.forEach(c => j.weights[c.name] = 50);
+    model.alternatives.forEach(() => j.scores.push(initScoresForAlt()));
+    model.judges.push(j);
+    $('newJudge').value = '';
+    renderJudges();
+  };
+
+  async function deleteJudge(i) {
+    const ok = await Modal.confirm('Hapus juri "' + model.judges[i].name + '"?');
+    if (!ok) return;
+    model.judges.splice(i, 1);
+    renderJudges();
+  }
+
+  function initScoresForAlt() {
+    const obj = {};
+    model.criteria.forEach(c => obj[c.name] = 0);
+    return obj;
+  }
+
+  function openJudge(i) {
+    JudgeEditor.open(i);
+  }
+
+  // Compute
+  async function computeAll() {
+    if (model.criteria.length === 0 || model.alternatives.length === 0 || model.judges.length === 0) {
+      await Modal.alert('Pastikan minimal 1 kriteria, 1 alternatif, 1 juri');
+      return;
+    }
+
+    const perJudgeResults = [];
+    model.judges.forEach(j => {
+      const raw = j.weights;
+      const norm = {};
+      const keys = Object.keys(raw);
+      let sum = 0;
+      keys.forEach(k => sum += Number(raw[k] || 0));
+      if (sum === 0) sum = 1;
+      keys.forEach(k => norm[k] = Number(raw[k] || 0) / sum);
+
+      const utilities = model.alternatives.map(a => {
+        const obj = { Member: a };
+        keys.forEach(k => obj[k] = 0);
+        return obj;
+      });
+
+      keys.forEach(k => {
+        const arr = model.alternatives.map((a, ai) =>
+          (j.scores[ai] && typeof j.scores[ai][k] !== 'undefined') ? Number(j.scores[ai][k]) : 0
+        );
+        const min = Math.min(...arr);
+        const max = Math.max(...arr);
+        utilities.forEach((u, ai) => {
+          const rawv = arr[ai];
+          let util = 50;
+          if (max !== min) {
+            const crit = model.criteria.find(c => c.name === k);
+            if (crit && crit.type === 'cost') {
+              util = 100 * (max - rawv) / (max - min);
+            } else {
+              util = 100 * (rawv - min) / (max - min);
+            }
           }
-        }
-        utilities[ai][k] = util; // 0..100
-      })
-    })
-    // weighted contributions
-    utilities.forEach(u=>{
-      let total=0; keys.forEach(k=>{ total += u[k] * norm[k]; }); u.SMART = total; u._weights = norm;
-    })
-    utilities.sort((a,b)=>b.SMART - a.SMART);
-    utilities.forEach((u,idx)=> u.Rank = idx+1);
-    perJudgeResults.push({judge:j.name, table:utilities});
-  });
+          utilities[ai][k] = util;
+        });
+      });
 
-  // Borda aggregation: convert each per-judge rank to points (N+1 - rank) and sum
-  const N = model.alternatives.length; const totals = {};
-  model.alternatives.forEach(a=> totals[a]=0);
-  perJudgeResults.forEach(p=>{
-    p.table.forEach(row=>{ totals[row.Member] += (N + 1 - row.Rank); });
-  });
-  const final = Object.keys(totals).map(m=>({Member:m, TotalBorda:totals[m]})).sort((a,b)=>b.TotalBorda - a.TotalBorda);
+      utilities.forEach(u => {
+        let total = 0;
+        keys.forEach(k => { total += u[k] * norm[k]; });
+        u.SMART = total;
+        u._weights = norm;
+      });
+      utilities.sort((a, b) => b.SMART - a.SMART);
+      utilities.forEach((u, idx) => u.Rank = idx + 1);
+      perJudgeResults.push({ judge: j.name, table: utilities });
+    });
 
-  // render results
-  const out = [];
-  out.push('<h4>Per-Judge SMART (utilities & SMART score)</h4>');
-  perJudgeResults.forEach(p=>{
-    out.push(`<h5>Juri: ${escapeHtml(p.judge)}</h5><table><thead><tr><th>Member</th>${model.criteria.map(c=>`<th>${escapeHtml(c.name)}</th>`).join('')}<th>SMART</th><th>Rank</th></tr></thead><tbody>`);
-    p.table.forEach(r=>{
-      out.push('<tr><td>'+escapeHtml(r.Member)+'</td>'+ model.criteria.map(c=>`<td>${(r[c]).toFixed(2)}</td>`).join('') + `<td>${r.SMART.toFixed(4)}</td><td>${r.Rank}</td></tr>`);
-    })
-    out.push('</tbody></table>');
-  })
-  out.push('<h4>Final Borda aggregation</h4>');
-  out.push('<table><thead><tr><th>Member</th><th>Total Borda</th></tr></thead><tbody>');
-  final.forEach(f=> out.push(`<tr><td>${escapeHtml(f.Member)}</td><td>${f.TotalBorda}</td></tr>`));
-  out.push('</tbody></table>');
-  $('resultsArea').innerHTML = out.join('');
-  updateStatus('Compute selesai');
-}
+    // Borda aggregation
+    const N = model.alternatives.length;
+    const totals = {};
+    model.alternatives.forEach(a => totals[a] = 0);
+    perJudgeResults.forEach(p => {
+      p.table.forEach(row => { totals[row.Member] += (N + 1 - row.Rank); });
+    });
+    const final = Object.keys(totals)
+      .map(m => ({ Member: m, TotalBorda: totals[m] }))
+      .sort((a, b) => b.TotalBorda - a.TotalBorda);
 
-// Export / Reset
-$('exportBtn').onclick = ()=>{
-  const data = JSON.stringify(model,null,2); const blob = new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='smart_borda_model.json'; a.click(); URL.revokeObjectURL(url);
-}
-$('resetBtn').onclick = ()=>{ if(confirm('Reset semua data?')){ model.criteria=[]; model.alternatives=[]; model.judges=[]; renderAll(); $('resultsArea').innerHTML=''; updateStatus('Reset done'); }}
-$('computeBtn').onclick = computeAll;
+    // Render results
+    const out = [];
+    out.push('<h4>Per-Judge SMART (utilities & SMART score)</h4>');
+    perJudgeResults.forEach(p => {
+      out.push(`<h5>${escapeHtml(p.judge)}</h5>`);
+      out.push(`<div class="table-wrapper">`);
+      out.push(`<table><thead><tr><th>Member</th>${model.criteria.map(c => `<th>${escapeHtml(c.name)}</th>`).join('')}<th>SMART</th><th>Rank</th></tr></thead><tbody>`);
+      p.table.forEach(r => {
+        const rankClass = getRankBadgeClass(r.Rank);
+        out.push(`<tr><td>${escapeHtml(r.Member)}</td>${model.criteria.map(c => `<td>${r[c.name].toFixed(2)}</td>`).join('')}<td><span class="smart-score">${r.SMART.toFixed(4)}</span></td><td><span class="${rankClass}">${r.Rank}</span></td></tr>`);
+      });
+      out.push(`</tbody></table></div>`);
+    });
 
-function renderAll(){ renderCriteria(); renderAlternatives(); renderJudges(); }
-function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escapeId(s){ return encodeURIComponent(s).replace(/%/g,''); }
+    out.push('<h4>Final Borda Aggregation</h4>');
+    out.push('<div class="table-wrapper">');
+    out.push('<table><thead><tr><th>Member</th><th>Total Borda</th><th>Rank</th></tr></thead><tbody>');
+    final.forEach((f, i) => {
+      const rankClass = getRankBadgeClass(i + 1);
+      out.push(`<tr><td>${escapeHtml(f.Member)}</td><td><span class="borda-total">${f.TotalBorda}</span></td><td><span class="${rankClass}">${i + 1}</span></td></tr>`);
+    });
+    out.push('</tbody></table></div>');
+    $('resultsArea').innerHTML = out.join('');
+    updateStatus('Compute selesai');
+  }
 
-// initial example: populate with some defaults for convenience
-(function seed(){ const initialCriteria = ['Synchronization','Marching Accuracy','Flag Handling','Command Response','Physical Appearance','Time Accuracy','Protocol','Teamwork and Communication','Discipline','Cohesiveness','Responsibility']; initialCriteria.forEach(c=> model.criteria.push({name:c,type:'benefit'})); model.alternatives.push('raniah yulia yasmin 9a','okta dina andriyanti 9b','maida kenzi kayana 9a','verlita eka putri 8d'); model.judges.push({name:'Sample Judge', weights: {}, scores: []}); model.criteria.forEach(c=> model.judges[0].weights[c.name]=50); model.alternatives.forEach(a=> model.judges[0].scores.push(initScoresForAlt())); renderAll(); })();
+  // Export / Reset
+  $('exportBtn').onclick = () => {
+    const data = JSON.stringify(model, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'smart_borda_model.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  $('resetBtn').onclick = async () => {
+    const ok = await Modal.confirm('Reset semua data?');
+    if (!ok) return;
+    model.criteria = [];
+    model.alternatives = [];
+    model.judges = [];
+    renderAll();
+    $('resultsArea').innerHTML = '';
+    updateStatus('Reset done');
+  };
+
+  $('computeBtn').onclick = computeAll;
+
+  function renderAll() { renderCriteria(); renderAlternatives(); renderJudges(); }
+
+  // Expose for inline onclick
+  window.editCriterion = editCriterion;
+  window.deleteCriterion = deleteCriterion;
+  window.deleteAlternative = deleteAlternative;
+  window.deleteJudge = deleteJudge;
+  window.openJudge = openJudge;
+
+  // Seed initial data
+  (function seed() {
+    const initialCriteria = [
+      'Synchronization', 'Marching Accuracy', 'Flag Handling', 'Command Response',
+      'Physical Appearance', 'Time Accuracy', 'Protocol',
+      'Teamwork and Communication', 'Discipline', 'Cohesiveness', 'Responsibility'
+    ];
+    initialCriteria.forEach(c => model.criteria.push({ name: c, type: 'benefit' }));
+    model.alternatives.push(
+      'raniah yulia yasmin 9a', 'okta dina andriyanti 9b',
+      'maida kenzi kayana 9a', 'verlita eka putri 8d'
+    );
+    model.judges.push({ name: 'Sample Judge', weights: {}, scores: [] });
+    model.criteria.forEach(c => model.judges[0].weights[c.name] = 50);
+    model.alternatives.forEach(() => model.judges[0].scores.push(initScoresForAlt()));
+    renderAll();
+  })();
+});
